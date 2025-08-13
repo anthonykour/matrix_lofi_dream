@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Matrix Code Rain</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: black;
+      overflow: hidden;
+    }
+    canvas { display: block; }
+
+    .sparkle {
+      position: absolute;
+      font-size: 1.5rem;
+      animation: sparkleFade 1s linear forwards;
+      pointer-events: none;
+    }
+    @keyframes sparkleFade {
+      0% { opacity: 1; transform: scale(1); }
+      100% { opacity: 0; transform: scale(1.5); }
+    }
+
+    .scanlines {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: repeating-linear-gradient(
+        to bottom,
+        rgba(255, 255, 255, 0.05),
+        rgba(255, 255, 255, 0.05) 1px,
+        transparent 1px,
+        transparent 4px
+      );
+      pointer-events: none;
+      z-index: 4;
+    }
+
+    .bg-overlay {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: url('https://backiee.com/static/wallpapers/5120x2880/395801.jpg') center / cover no-repeat;
+      opacity: 0.1;
+      z-index: 0;
+    }
+
+    .particles {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      z-index: 3;
+      pointer-events: none;
+      background: transparent;
+    }
+
+    @keyframes raindropFall {
+      from { background-position: 0 0; }
+      to   { background-position: 0 1000px; }
+    }
+
+    .flash {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      background: white;
+      opacity: 0;
+      z-index: 5;
+      pointer-events: none;
+      animation: none;
+      visibility: hidden;
+    }
+    @keyframes lightningFlash {
+      0% { opacity: 0; }
+      10% { opacity: 0.5; }
+      20% { opacity: 0; }
+      30% { opacity: 0.3; }
+      100% { opacity: 0; }
+    }
+
+    :root{
+      --accent: #66ccff;
+      --accent-dim: #4ba3cc;
+      --accent-glow: rgba(102,204,255,.35);
+    }
+
+    /* Layer order:
+       bg (0) < visualizer (1) < matrix (2) < raindrops (3) < scanlines (4) < flash (5) */
+    .bg-overlay { z-index: 0; }
+    #audioViz   { position: absolute; right: 10px; bottom: 10px; width: 320px; height: 90px; z-index: 1;
+                  pointer-events: none; background: transparent !important; border: none !important; box-shadow: none !important;
+                  border-radius: 0 !important; opacity: 1; transition: opacity 0.4s ease; }
+    #matrixCanvas { position: relative; z-index: 2; background: transparent; }
+    #raindropCanvas.particles { z-index: 3; }
+    .scanlines { z-index: 4; }
+    .flash { z-index: 5; }
+  </style>
+</head>
+<body>
+
+<!-- COLOR MAP (optional external colors) -->
+<script>
+(function(){
+  window.COLOR_MAP = window.COLOR_MAP || {
+    pink:"#ff66cc", lilac:"#ff99ff", violet:"#cc66ff",
+    aqua:"#66ccff", cyan:"#66ffff", mint:"#99ffcc", lime:"#ccff66"
+  };
+  window.__applyExternalColors = function(map){
+    if (!map) return;
+    try {
+      for (var k in map){ if (Object.prototype.hasOwnProperty.call(map,k)) window.COLOR_MAP[k] = map[k]; }
+      if (window.__vizSettings && window.__vizSettings.colorKey) {
+        var key = window.__vizSettings.colorKey;
+        var hex = window.COLOR_MAP[key] || window.COLOR_MAP['aqua'];
+        if (typeof setThemeFrom === 'function' && window.__vizSettings.themeFollowColor) setThemeFrom(hex);
+        try { if (typeof rebuildGradient === 'function') rebuildGradient(); } catch(e){}
+        try { if (window.__vizControl && window.__vizControl.requestResize) window.__vizControl.requestResize(); } catch(e){}
+      }
+    } catch(e){}
+  };
+  fetch('visualizer_colors.json').then(r => r.ok ? r.json() : null)
+    .then(json => { if (json) window.__applyExternalColors(json); })
+    .catch(()=>{});
+})();
+</script>
+
+<div class="bg-overlay"></div>
+<canvas id="audioViz"></canvas>
+<canvas id="raindropCanvas" class="particles"></canvas>
+<canvas id="matrixCanvas"></canvas>
+<div class="scanlines"></div>
+
+<!-- Lightning overlay element -->
+<div class="flash" id="lightning"></div>
+
+<!-- Ambient rain (loop) + one-shot thunder (same file) -->
+<audio id="rain-audio"  src="rain-and-thunder-sfx-12820.mp3" preload="auto" loop></audio>
+<audio id="thunder-one" src="rain-and-thunder-sfx-12820.mp3" preload="auto"></audio>
+<script>
+  (function(){
+    var ra = document.getElementById('rain-audio');
+    var th = document.getElementById('thunder-one');
+    if (ra) { window.rainAudio = ra; try{ ra.volume = 0.25; }catch(e){} }
+    if (th) { window.thunderOne = th; try{ th.volume = 0.60; }catch(e){} }
+  })();
+</script>
+
+<!-- MATRIX CODE + BURSTS (with ripple) -->
+<script>
+  const canvas = document.getElementById("matrixCanvas");
+  const ctx = canvas.getContext("2d");
+
+  function sizeMatrix(){ canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+  sizeMatrix(); window.addEventListener("resize", sizeMatrix);
+
+  const fontSize = 20;
+  const chars = "アァイィウヴエェオカガキギクグケゲコゴサザシジスズセゼソゾタダチッヂヅテデトドナニヌネノハバパヒビピフブプヘベペホボポABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split("");
+
+  // Global multiplier to slow/faster code rain (1 = original, lower = slower)
+  window.RAIN_MULT = 0.35;
+
+  let columns = Math.floor(canvas.width / fontSize);
+  let drops   = new Array(columns).fill(0);
+  let speeds  = new Array(columns).fill(0).map(() => Math.random() * 0.5 + 0.75); // base speeds
+
+  window.addEventListener("resize", () => {
+    columns = Math.floor(canvas.width / fontSize);
+    drops   = new Array(columns).fill(0);
+    speeds  = new Array(columns).fill(0).map(() => Math.random() * 0.5 + 0.75);
+  });
+
+  const bursts = [];
+  window.bursts = bursts; // expose for toggles to clear
+
+  function draw() {
+    ctx.globalCompositeOperation = "destination-out";
+    ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalCompositeOperation = "source-over";
+
+    ctx.font = fontSize + "px monospace";
+
+    // Matrix columns
+    for (let i = 0; i < drops.length; i++) {
+      const text = chars[(Math.random()*chars.length)|0];
+      const x = i * fontSize;
+      const y = drops[i] * fontSize;
+
+      ctx.fillStyle = "rgba(0, 100, 0, 0.7)";
+      ctx.fillText(text, x, y - fontSize);
+
+      ctx.fillStyle = "rgb(180, 255, 180)";
+      ctx.fillText(text, x, y);
+
+      // Apply slowdown multiplier
+      const speedMult = window.RAIN_MULT || 1;
+      drops[i] += speeds[i] * speedMult;
+
+      if (y > canvas.height && Math.random() > 0.975) {
+        drops[i] = 0;
+        // new stream respects slowdown too
+        speeds[i] = (Math.random() * 0.5 + 0.75);
+      }
+    }
+
+    // Bursts with ripple rings
+    for (let i = bursts.length - 1; i >= 0; i--) {
+      const burst = bursts[i];
+      if (!burst.length) { bursts.splice(i, 1); continue; }
+
+      const centerX = burst.reduce((s, b) => s + b.x, 0) / burst.length;
+      const centerY = burst.reduce((s, b) => s + b.y, 0) / burst.length;
+      let maxDist = 0;
+      for (const b of burst) {
+        const d = Math.hypot(b.x - centerX, b.y - centerY);
+        if (d > maxDist) maxDist = d;
+      }
+
+      const rings = 10;
+      const rippleChars = ["♡","❤","❥","💚","💖","❣","💕"];
+      const baseAlpha = (burst[0].opacity ?? 1) * 0.08;
+
+      ctx.save();
+      ctx.font = `${fontSize}px monospace`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      for (let r = 1; r <= rings; r++) {
+        const radius = (maxDist + 30) * (r / rings);
+        const circumference = 2 * Math.PI * radius;
+        const glyphSpacing = fontSize * 1.1;
+        const count = Math.max(6, Math.floor(circumference / glyphSpacing));
+        const glyph = rippleChars[r % rippleChars.length];
+
+        ctx.fillStyle = `rgba(0, 255, 70, ${baseAlpha})`;
+        for (let j = 0; j < count; j++) {
+          const angle = (j / count) * 2 * Math.PI;
+          const x = centerX + Math.cos(angle) * radius;
+          const y = centerY + Math.sin(angle) * radius;
+          ctx.fillText(glyph, x, y);
+        }
+      }
+      ctx.restore();
+
+      // Burst characters (bounce + fade)
+      for (let j = 0; j < burst.length; j++) {
+        const b = burst[j];
+        b.opacity -= 0.06;
+
+        ctx.font = `${fontSize}px monospace`;
+        const rainbow = ["#ff66cc","#ff99ff","#cc66ff","#66ccff","#66ffff","#99ffcc","#ccff66"];
+        ctx.fillStyle = rainbow[(Math.random()*rainbow.length)|0];
+
+        ctx.save();
+        ctx.translate(b.x, b.y);
+        const bounce = Math.sin(Date.now() / 100 + j * 10) * 2;
+        ctx.fillText(b.char, 0, bounce);
+        ctx.restore();
+
+        if (Math.random() < 0.02) {
+          const emoji = document.createElement("div");
+          emoji.className = "sparkle";
+          emoji.style.left = `${b.x}px`;
+          emoji.style.top = `${b.y}px`;
+          emoji.textContent = "✨";
+          document.body.appendChild(emoji);
+          setTimeout(() => emoji.remove(), 1000);
+        }
+      }
+
+      bursts[i] = burst.filter(b => b.opacity > 0);
+      if (bursts[i].length === 0) bursts.splice(i, 1);
+    }
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  function spawnBurst() {
+    const burst = [];
+    const count = (Math.random()*10 + 10) | 0;
+    const baseX = Math.random() * canvas.width;
+    const baseY = Math.random() * canvas.height;
+    const words = ["uwu","owo","nani","oni-chan","senpai","rawr","kawaii","pien","paon","kyun desu","ganbaru zoi"];
+    const word = words[(Math.random()*words.length)|0];
+    for (let i = 0; i < count; i++) {
+      const offsetX = (Math.random() - 0.5) * 100;
+      const offsetY = (Math.random() - 0.5) * 100;
+      burst.push({ x: baseX + offsetX, y: baseY + offsetY, char: word, opacity: 1 });
+    }
+    bursts.push(burst);
+  }
+  window.spawnBurst = spawnBurst;
+  window.__burstTimer = window.__burstTimer || setInterval(window.spawnBurst, 6000);
+</script>
+
+<!-- RAINDROPS LAYER -->
+<script>
+  const raindropCanvas = document.getElementById("raindropCanvas");
+  const rainCtx = raindropCanvas.getContext("2d");
+
+  function resizeRain() {
+    raindropCanvas.width = window.innerWidth;
+    raindropCanvas.height = window.innerHeight;
+  }
+  resizeRain();
+  window.addEventListener("resize", resizeRain);
+
+  const raindrops = Array.from({ length: 150 }, () => ({
+    x: Math.random() * window.innerWidth,
+    y: Math.random() * window.innerHeight,
+    length: Math.random() * 20 + 10,
+    speed: Math.random() * 3 + 2
+  }));
+
+  function drawRain() {
+    rainCtx.clearRect(0, 0, raindropCanvas.width, raindropCanvas.height);
+    rainCtx.strokeStyle = "rgba(180, 255, 255, 0.1)";
+    rainCtx.lineWidth = 1;
+    rainCtx.beginPath();
+    for (const drop of raindrops) {
+      rainCtx.moveTo(drop.x, drop.y);
+      rainCtx.lineTo(drop.x, drop.y + drop.length);
+      drop.y += drop.speed;
+      if (drop.y > window.innerHeight) {
+        drop.y = -drop.length;
+        drop.x = Math.random() * window.innerWidth;
+      }
+    }
+    rainCtx.stroke();
+    requestAnimationFrame(drawRain);
+  }
+  requestAnimationFrame(drawRain);
+</script>
+
+<!-- LIGHTNING (non-sticky + thunder) -->
+<script>
+  window.triggerLightning = function(){
+    try {
+      const old = document.getElementById('lightning');
+      if (old && old.parentNode) old.parentNode.removeChild(old);
+      const flash = document.createElement('div');
+      flash.className = 'flash'; flash.id = 'lightning';
+      document.body.appendChild(flash);
+
+      void flash.offsetWidth; // reflow
+      flash.style.visibility = 'visible';
+      flash.style.animation = 'lightningFlash 1s ease-in-out';
+
+      if (window.thunderOne) { try { window.thunderOne.currentTime = 0; window.thunderOne.play(); } catch(e){} }
+
+      const clear = () => {
+        try { flash.remove(); }
+        catch(e){ if (flash && flash.parentNode) flash.parentNode.removeChild(flash); }
+      };
+      flash.addEventListener('animationend', clear, { once: true });
+      setTimeout(clear, 1200);
+    } catch(e){}
+  };
+
+  window.__lightTimer = window.__lightTimer || setInterval(() => {
+    if (Math.random() < 0.1) window.triggerLightning();
+  }, 5000);
+</script>
+
+<!-- VISUALIZER -->
+<script>
+(function(){
+  const c = document.getElementById('audioViz');
+  if (!c) return;
+  const ctx = c.getContext('2d');
+
+  window.__vizSettings = window.__vizSettings || {
+    barCount: 64, opacity: 0.85, colorKey: 'aqua',
+    silenceDb: -45, themeFollowColor: true
+  };
+
+  function __hexToRgb(hex){ const v=(hex||'#66ccff').replace('#',''); return [parseInt(v.slice(0,2),16),parseInt(v.slice(2,4),16),parseInt(v.slice(4,6),16)]; }
+  function __darker(hex,f){ const [r,g,b]=__hexToRgb(hex); const cl=v=>Math.max(0,Math.min(255,Math.round(v*f))); return '#'+cl(r).toString(16).padStart(2,'0')+cl(g).toString(16).padStart(2,'0')+cl(b).toString(16).padStart(2,'0'); }
+  function setThemeFrom(hex){ try{ const [r,g,b]=__hexToRgb(hex); const root=document.documentElement.style; root.setProperty('--accent',hex); root.setProperty('--accent-dim',__darker(hex,0.7)); root.setProperty('--accent-glow',`rgba(${r},${g},${b},0.35)`);}catch(e){} }
+
+  function resizeViz(){ c.width = c.clientWidth || 320; c.height = c.clientHeight || 90; }
+  resizeViz(); window.addEventListener('resize', resizeViz);
+
+  function rebuildGradient(){
+    const CM = window.COLOR_MAP || {aqua:'#66ccff'};
+    const p = CM[window.__vizSettings.colorKey] || CM.aqua;
+    const o = window.__vizSettings.opacity;
+    const g = ctx.createLinearGradient(0, 0, 0, c.height);
+    const rgbP = __hexToRgb(p), rgbD = __hexToRgb(__darker(p, 0.7));
+    g.addColorStop(0, `rgba(${rgbP.join(',')},${o})`);
+    g.addColorStop(1, `rgba(${rgbD.join(',')},${o})`);
+    window.__vizSettings._gradient = g;
+    if (window.__vizSettings.themeFollowColor) setThemeFrom(p);
+  }
+
+  let bars = new Array(window.__vizSettings.barCount).fill(0);
+  let smooth = new Array(window.__vizSettings.barCount).fill(0);
+  const ATTACK=0.40, DECAY=0.90;
+
+  const SILENCE_MS=3000; let lastLoudTs=Date.now(); let currentDb=-120; let gotSamples=false;
+
+  function draw(){
+    const w=c.width,h=c.height;
+    if (!window.__vizSettings._gradient) rebuildGradient();
+    ctx.clearRect(0,0,w,h);
+
+    // Idle pulse until WE feeds samples
+    if (!gotSamples){
+      const t=Date.now()*0.002;
+      for (let i=0;i<bars.length;i++) bars[i]=0.12*Math.abs(Math.sin(t + i*0.25));
+    }
+
+    const n=bars.length, gap=2, barW=Math.max(1,(w-(n-1)*gap)/n);
+    for(let i=0;i<n;i++){
+      if(bars[i]>smooth[i]) smooth[i]=smooth[i]*(1-ATTACK)+bars[i]*ATTACK;
+      else                  smooth[i]=smooth[i]*DECAY+bars[i]*(1-DECAY);
+      const val=Math.min(1,smooth[i]), bh=val*h, x=i*(barW+gap), y=h-bh;
+      ctx.fillStyle=window.__vizSettings._gradient; ctx.fillRect(x,y,barW,bh);
+      const baseAlpha=0.4, baseOp=0.85; let hl=(window.__vizSettings.opacity/baseOp)*baseAlpha; hl=Math.max(0,Math.min(1,hl));
+      ctx.fillStyle='rgba(255,255,255,'+hl+')'; ctx.fillRect(x,y,barW,2);
+    }
+
+    const now=Date.now(); if(currentDb>(window.__vizSettings.silenceDb||-45)) lastLoudTs=now;
+    c.style.opacity = (!window.wallpaperRegisterAudioListener || !gotSamples) ? 1 : (((now-lastLoudTs)>SILENCE_MS) ? 0 : 1);
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+
+  try{ if (window.wallpaperRequestAudio){ window.wallpaperRequestAudio({ device: 'default', channel: 'output' }); } }catch(e){}
+
+  if (window.wallpaperRegisterAudioListener){
+    window.wallpaperRegisterAudioListener(function(samples){
+      gotSamples = true;
+      const n=window.__vizSettings.barCount, stride=Math.max(1,Math.floor(samples.length/n));
+      let allSum=0, allCount=0;
+      for(let i=0;i<n;i++){
+        let sum=0; for(let j=0;j<stride;j++){ const s=samples[i*stride+j]||0; sum+=s*s; allSum+=s*s; allCount++; }
+        bars[i]=Math.min(1, Math.sqrt(sum/stride));
+      }
+      const overall=Math.sqrt(allSum/Math.max(1,allCount)); currentDb=20*Math.log10(overall+1e-6);
+    });
+  }
+
+  window.__vizControl = {
+    requestResize(){ resizeViz(); rebuildGradient(); },
+    setBars(n){ n=Math.max(16,Math.min(128,Math.floor(n||64))); window.__vizSettings.barCount=n; bars=new Array(n).fill(0); smooth=new Array(n).fill(0); this.requestResize(); },
+    setOpacity(op){ window.__vizSettings.opacity=Math.max(0.1,Math.min(1.0,+op||0.85)); rebuildGradient(); },
+    setColorKey(key){ window.__vizSettings.colorKey=key||'aqua'; rebuildGradient(); },
+    setEnabled(on){ const v=document.getElementById('audioViz'); if (v) v.style.display = on?'block':'none'; }
+  };
+
+  fetch('project.json').then(r=>r.json()).then(cfg=>{
+    const u=cfg.userProperties||{};
+    if(u.visualizer) window.__vizControl.setEnabled(u.visualizer.default !== false);
+    if(u.bars_count) window.__vizControl.setBars(u.bars_count.default);
+    if(u.bar_opacity) window.__vizControl.setOpacity(u.bar_opacity.default);
+    if(u.bar_color) window.__vizControl.setColorKey(u.bar_color.default);
+    const el = document.getElementById('audioViz');
+    if (el){
+      if(u.viz_width)  el.style.width  = Math.floor(u.viz_width.default)+'px';
+      if(u.viz_height) el.style.height = Math.floor(u.viz_height.default)+'px';
+      window.__vizControl.requestResize();
+    }
+    if (u.silence_threshold) window.__vizSettings.silenceDb = +u.silence_threshold.default;
+    if (u.theme_follow_color) window.__vizSettings.themeFollowColor = u.theme_follow_color.default !== false;
+  }).catch(()=>{});
+})();
+</script>
+
+<!-- WALLPAPER ENGINE PROPERTY LISTENER -->
+<script>
+(function(){
+  function $(sel){ return document.querySelector(sel); }
+  function id(x){ return document.getElementById(x); }
+
+  function setRaindrops(on){
+    const c=id('raindropCanvas'); if (c) c.style.display = on?'block':'none';
+    if (window.rainAudio){
+      if (on){ try { window.rainAudio.play(); } catch(e){} }
+      else   { try { window.rainAudio.pause(); window.rainAudio.currentTime = 0; } catch(e){} }
+    }
+  }
+  function setScanlines(on){ const s=$('.scanlines'); if (s) s.style.display = on?'block':'none'; }
+  function setBursts(on){
+    if (typeof window.spawnBurst === 'function') {
+      if (on && !window.__burstTimer) {
+        window.__burstTimer = setInterval(window.spawnBurst, 6000);
+      }
+      if (!on && window.__burstTimer) {
+        clearInterval(window.__burstTimer);
+        window.__burstTimer = null;
+      }
+    }
+    if (!on && Array.isArray(window.bursts)) window.bursts.length = 0;
+  }
+  function setLightning(on){
+    if (on && !window.__lightTimer) {
+      window.__lightTimer = setInterval(function(){
+        if (Math.random()<0.1 && typeof window.triggerLightning==='function') window.triggerLightning();
+      }, 5000);
+    }
+    if (!on && window.__lightTimer) {
+      clearInterval(window.__lightTimer);
+      window.__lightTimer=null;
+    }
+  }
+  function setVisualizer(on){
+    const v = id('audioViz');
+    if (v) v.style.display = on ? 'block' : 'none';
+    if (window.__vizControl && window.__vizControl.setEnabled) window.__vizControl.setEnabled(!!on);
+  }
+
+  window.wallpaperPropertyListener = {
+    applyUserProperties: function(p){
+      if (p.raindrops) setRaindrops(!!p.raindrops.value);
+      if (p.scanlines) setScanlines(!!p.scanlines.value);
+      if (p.bursts) setBursts(!!p.bursts.value);
+      if (p.lightning) setLightning(!!p.lightning.value);
+
+      if (p.visualizer) setVisualizer(!!p.visualizer.value);
+      if (p.bars_count && window.__vizControl && window.__vizControl.setBars) window.__vizControl.setBars(p.bars_count.value);
+      if (p.bar_opacity && window.__vizControl && window.__vizControl.setOpacity) window.__vizControl.setOpacity(p.bar_opacity.value);
+      if (p.bar_color && window.__vizControl && window.__vizControl.setColorKey) window.__vizControl.setColorKey(p.bar_color.value);
+      if ((p.viz_width || p.viz_height) && window.__vizControl && window.__vizControl.requestResize){
+        const el = id('audioViz');
+        if (el){
+          if (p.viz_width)  el.style.width  = Math.floor(p.viz_width.value) + 'px';
+          if (p.viz_height) el.style.height = Math.floor(p.viz_height.value) + 'px';
+          window.__vizControl.requestResize();
+        }
+      }
+      if (p.silence_threshold && window.__vizSettings) window.__vizSettings.silenceDb = +p.silence_threshold.value;
+      if (p.theme_follow_color && window.__vizSettings){
+        window.__vizSettings.themeFollowColor = !!p.theme_follow_color.value;
+        if (window.__vizSettings.themeFollowColor && typeof setThemeFrom === 'function') {
+          const cm = window.COLOR_MAP || {aqua:'#66ccff'};
+          const key = (window.__vizSettings.colorKey || 'aqua');
+          setThemeFrom(cm[key] || cm.aqua);
+        }
+      }
+    }
+  };
+
+  // Browser defaults (quick preview if project.json exists)
+  fetch('project.json').then(r=>r.json()).then(cfg=>{
+    const u = cfg.userProperties || {};
+    setRaindrops(u.raindrops ? u.raindrops.default !== false : true);
+    setScanlines(u.scanlines ? u.scanlines.default !== false : true);
+    setBursts(u.bursts ? u.bursts.default !== false : true);
+    setLightning(u.lightning ? u.lightning.default !== false : true);
+    setVisualizer(u.visualizer ? u.visualizer.default !== false : true);
+  }).catch(()=>{});
+})();
+</script>
+
+</body>
+</html>

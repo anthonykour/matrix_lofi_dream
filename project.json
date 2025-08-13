@@ -1,0 +1,294 @@
+{
+	"contentrating" : "Everyone",
+	"description" : "A lo-fi, vaporwave-inspired Matrix code rain wallpaper with kawaii bursts, VHS effects, thunder audio, and optional toggleable features.",
+	"file" : "index.html",
+	"general" : 
+	{
+		"properties" : 
+		{
+			"bar_color" : 
+			{
+				"index" : 7,
+				"options" : 
+				[
+					{
+						"label" : "pink",
+						"value" : "pink"
+					},
+					{
+						"label" : "lilac",
+						"value" : "lilac"
+					},
+					{
+						"label" : "violet",
+						"value" : "violet"
+					},
+					{
+						"label" : "aqua",
+						"value" : "aqua"
+					},
+					{
+						"label" : "cyan",
+						"value" : "cyan"
+					},
+					{
+						"label" : "mint",
+						"value" : "mint"
+					},
+					{
+						"label" : "lime",
+						"value" : "lime"
+					}
+				],
+				"order" : 107,
+				"text" : "Visualizer Color",
+				"type" : "combo",
+				"value" : "aqua"
+			},
+			"bar_opacity" : 
+			{
+				"fraction" : true,
+				"index" : 6,
+				"max" : 1,
+				"min" : 0.1,
+				"order" : 106,
+				"precision" : 2,
+				"step" : 0.1,
+				"text" : "Visualizer Opacity",
+				"type" : "slider",
+				"value" : 0.85
+			},
+			"bars_count" : 
+			{
+				"fraction" : false,
+				"index" : 5,
+				"max" : 128,
+				"min" : 16,
+				"order" : 105,
+				"text" : "Visualizer Bars",
+				"type" : "slider",
+				"value" : 64
+			},
+			"bursts" : 
+			{
+				"index" : 2,
+				"order" : 102,
+				"text" : "Enable Bursts",
+				"type" : "bool",
+				"value" : true
+			},
+			"lightning" : 
+			{
+				"index" : 3,
+				"order" : 103,
+				"text" : "Lightning Flashes",
+				"type" : "bool",
+				"value" : true
+			},
+			"raindrops" : 
+			{
+				"index" : 0,
+				"order" : 100,
+				"text" : "Show Raindrops",
+				"type" : "bool",
+				"value" : true
+			},
+			"scanlines" : 
+			{
+				"index" : 1,
+				"order" : 101,
+				"text" : "Show Scanlines",
+				"type" : "bool",
+				"value" : true
+			},
+			"schemecolor" : 
+			{
+				"order" : 0,
+				"text" : "ui_browse_properties_scheme_color",
+				"type" : "color",
+				"value" : "0 0 0"
+			},
+			"silence_threshold" : 
+			{
+				"fraction" : false,
+				"index" : 10,
+				"max" : -20,
+				"min" : -60,
+				"order" : 110,
+				"text" : "Visualizer Silence Threshold (dB)",
+				"type" : "slider",
+				"value" : -45
+			},
+			"theme_follow_color" : 
+			{
+				"index" : 11,
+				"order" : 111,
+				"text" : "Theme Follows Visualizer Color",
+				"type" : "bool",
+				"value" : true
+			},
+			"visualizer" : 
+			{
+				"index" : 4,
+				"order" : 104,
+				"text" : "Show Visualizer",
+				"type" : "bool",
+				"value" : true
+			},
+			"viz_height" : 
+			{
+				"fraction" : false,
+				"index" : 9,
+				"max" : 300,
+				"min" : 60,
+				"order" : 109,
+				"text" : "Visualizer Height (px)",
+				"type" : "slider",
+				"value" : 90
+			},
+			"viz_width" : 
+			{
+				"fraction" : false,
+				"index" : 8,
+				"max" : 1200,
+				"min" : 200,
+				"order" : 108,
+				"text" : "Visualizer Width (px)",
+				"type" : "slider",
+				"value" : 320
+			}
+		},
+		"supportsaudioprocessing" : true
+	},
+	"preview" : "preview.jpg",
+	"ratingsex" : "none",
+	"ratingviolence" : "none",
+	"tags" : [ "Relaxing" ],
+	"title" : "Matrix Lofi Dream",
+	"type" : "Web",
+	"userProperties" : 
+	{
+		"bar_color" : 
+		{
+			"default" : "aqua",
+			"label" : "Visualizer Color",
+			"options" : 
+			[
+				{
+					"label" : "pink",
+					"value" : "pink"
+				},
+				{
+					"label" : "lilac",
+					"value" : "lilac"
+				},
+				{
+					"label" : "violet",
+					"value" : "violet"
+				},
+				{
+					"label" : "aqua",
+					"value" : "aqua"
+				},
+				{
+					"label" : "cyan",
+					"value" : "cyan"
+				},
+				{
+					"label" : "mint",
+					"value" : "mint"
+				},
+				{
+					"label" : "lime",
+					"value" : "lime"
+				}
+			],
+			"type" : "combo"
+		},
+		"bar_opacity" : 
+		{
+			"default" : 0.85,
+			"label" : "Visualizer Opacity",
+			"max" : 1,
+			"min" : 0.1,
+			"step" : 0.05,
+			"type" : "range"
+		},
+		"bars_count" : 
+		{
+			"default" : 64,
+			"label" : "Visualizer Bars",
+			"max" : 128,
+			"min" : 16,
+			"step" : 1,
+			"type" : "range"
+		},
+		"bursts" : 
+		{
+			"default" : true,
+			"label" : "Enable Glitch Bursts",
+			"type" : "bool"
+		},
+		"lightning" : 
+		{
+			"default" : true,
+			"label" : "Lightning Flashes",
+			"type" : "bool"
+		},
+		"raindrops" : 
+		{
+			"default" : true,
+			"label" : "Show Raindrops",
+			"type" : "bool"
+		},
+		"scanlines" : 
+		{
+			"default" : true,
+			"label" : "Show Scanlines",
+			"type" : "bool"
+		},
+		"silence_threshold" : 
+		{
+			"default" : -45,
+			"label" : "Visualizer Silence Threshold (dB)",
+			"max" : -20,
+			"min" : -60,
+			"step" : 1,
+			"type" : "range"
+		},
+		"theme_follow_color" : 
+		{
+			"default" : true,
+			"label" : "Theme Follows Visualizer Color",
+			"type" : "bool"
+		},
+		"visualizer" : 
+		{
+			"default" : true,
+			"label" : "Show Visualizer",
+			"type" : "bool"
+		},
+		"viz_height" : 
+		{
+			"default" : 90,
+			"label" : "Visualizer Height (px)",
+			"max" : 300,
+			"min" : 60,
+			"step" : 5,
+			"type" : "range"
+		},
+		"viz_width" : 
+		{
+			"default" : 320,
+			"label" : "Visualizer Width (px)",
+			"max" : 1200,
+			"min" : 200,
+			"step" : 10,
+			"type" : "range"
+		}
+	},
+	"version" : 4,
+	"visibility" : "public",
+	"workshopid" : "3545124185",
+	"workshopurl" : "steam://url/CommunityFilePage/3545124185"
+}
